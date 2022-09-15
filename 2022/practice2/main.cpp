@@ -27,27 +27,80 @@ void glew_fail(std::string_view message, GLenum error)
     throw std::runtime_error(to_string(message) + reinterpret_cast<const char *>(glewGetErrorString(error)));
 }
 
+// const char vertex_shader_source[] =
+// R"(#version 330 core
+
+// const vec2 VERTICES[3] = vec2[3](
+//     vec2(0.0, 1.0),
+//     vec2(-sqrt(0.75), -0.5),
+//     vec2( sqrt(0.75), -0.5)
+// );
+
+// const vec3 COLORS[3] = vec3[3](
+//     vec3(1.0, 0.0, 0.0),
+//     vec3(0.0, 1.0, 0.0),
+//     vec3(0.0, 0.0, 1.0)
+// );
+
+// uniform float scale;
+// uniform float angle;
+
+// out vec3 color;
+
+// void main()
+// {
+//     vec2 position = VERTICES[gl_VertexID];
+//     mat2 rotation = mat2(cos(angle), sin(angle), -sin(angle), cos(angle));
+//     gl_Position = vec4(scale * rotation * position, 0.0, 1.0);
+//     color = COLORS[gl_VertexID];
+// }
+// )";
+
+
 const char vertex_shader_source[] =
 R"(#version 330 core
 
-const vec2 VERTICES[3] = vec2[3](
+const vec2 VERTICES[13] = vec2[13](
     vec2(0.0, 1.0),
+    vec2( sqrt(0.75), -0.5),
     vec2(-sqrt(0.75), -0.5),
+    vec2(-sqrt(0.75), -0.5),
+    vec2(-2 * sqrt(0.75), 1.0),
+    vec2(-2 * sqrt(0.75), 1.0),
+    vec2(-sqrt(0.75), 2.5),
+    vec2(-sqrt(0.75), 2.5),
+    vec2(sqrt(0.75), 2.5),
+    vec2(sqrt(0.75), 2.5),
+    vec2(2 * sqrt(0.75), 1.0),
+    vec2(2 * sqrt(0.75), 1.0),
     vec2( sqrt(0.75), -0.5)
 );
 
-const vec3 COLORS[3] = vec3[3](
+const vec3 COLORS[13] = vec3[13](
     vec3(1.0, 0.0, 0.0),
-    vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
+    vec3(1.0, 1.0, 0.0),
+    vec3(0.0, 0.0, 1.0),
+    vec3(0.0, 1.0, 1.0),
+    vec3(1.0, 1.0, 0.0),
+    vec3(1.0, 0.5, 0.0),
+    vec3(0.5, 1.0, 0.0),
+    vec3(0.5, 1.0, 0.7),
+    vec3(0.5, 0.0, 0.0),
+    vec3(0.0, 0.0, 1.0),
+    vec3(0.1, 0.1, 0.1),
+    vec3(0.2, 0.3, 0.4),
+    vec3(0.2, 0.2, 0.2)
 );
+
+uniform mat4 transform;
+uniform mat4 view;
 
 out vec3 color;
 
 void main()
 {
     vec2 position = VERTICES[gl_VertexID];
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = view * transform * vec4(position, 0.0, 1.0);
     color = COLORS[gl_VertexID];
 }
 )";
@@ -143,6 +196,18 @@ int main() try
 
     GLuint program = create_program(vertex_shader, fragment_shader);
 
+    // glUseProgram(program);
+    // GLint scale_location = glGetUniformLocation(program, "scale\0");
+    // glUniform1f(scale_location, 0.5);
+    // GLint angle_location = glGetUniformLocation(program, "angle\0");
+    // float time = 0.f;
+
+    glUseProgram(program);
+    GLint transform_location = glGetUniformLocation(program, "transform\0");
+    GLint view_location = glGetUniformLocation(program, "view\0");
+
+    float time = 0.f;
+
     GLuint vao;
     glGenVertexArrays(1, &vao);
 
@@ -167,18 +232,56 @@ int main() try
             break;
         }
 
+        // для 6 задания
+        // SDL_GL_SetSwapInterval(0);
+
         if (!running)
             break;
 
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+
+
+        // для 6 задания
+        // float dt = 0.016f;
+        // std::cout << dt;
+
         last_frame_start = now;
+
+        time += dt;
 
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        float aspect_ratio = width*1.f / height;
+        float view[16] =
+        {
+        1/aspect_ratio, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+        };
+        glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+
+        // glUniform1f(angle_location, time);
+
+        float x = sin(time) * 0.5;
+        float y = cos(time) * 0.5;
+
+        float scale = 0.15;
+        float angle = time;
+        float transform[16] =
+        {
+        scale * cos(angle), -scale * sin(angle), 0.0, x,
+        scale * sin(angle), scale * cos(angle), 0.0, y,
+        0.0, 0.0, scale, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+        };
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 13);
 
         SDL_GL_SwapWindow(window);
     }
