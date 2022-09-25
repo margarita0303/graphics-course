@@ -174,6 +174,37 @@ int main() try
 
     float time = 0.f;
 
+    vertex v1 = vertex {{100, 100}, {20, 20, 20, 20}};
+    vertex v2 = vertex {{100, 600}, {20, 20, 20, 20}};
+    vertex v3 = vertex {{600, 100}, {20, 20, 20, 20}};
+
+    std::vector<vertex> vertices = {v1, v2, v3};
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+        vertices.size() * sizeof(vertices[0]),
+        vertices.data(), GL_STATIC_DRAW);
+
+    float tmp_value;
+    glGetBufferSubData(GL_ARRAY_BUFFER, sizeof(vertex), sizeof(float), &tmp_value);
+    std::cout << tmp_value;
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    // сейчас мы настраиваем атрибуты вершин, атрибута два: position, color (в структуре vertex)
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), 0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(vertex), (void*)(8));
+
+
+
     bool running = true;
     while (running)
     {
@@ -196,10 +227,21 @@ int main() try
             {
                 int mouse_x = event.button.x;
                 int mouse_y = event.button.y;
+                vertices.push_back(vertex {{1.f * mouse_x, 1.f * mouse_y}, {20, 20, 20, 20}});
+                glBindBuffer(GL_ARRAY_BUFFER, vbo);
+                glBufferData(GL_ARRAY_BUFFER,
+                    vertices.size() * sizeof(vertices[0]),
+                    vertices.data(), GL_STATIC_DRAW);
             }
             else if (event.button.button == SDL_BUTTON_RIGHT)
             {
-
+                if (vertices.size() != 0) {
+                    vertices.pop_back();
+                    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+                    glBufferData(GL_ARRAY_BUFFER,
+                        vertices.size() * sizeof(vertices[0]),
+                        vertices.data(), GL_STATIC_DRAW);
+                }
             }
             break;
         case SDL_KEYDOWN:
@@ -226,14 +268,20 @@ int main() try
 
         float view[16] =
         {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
+            2.f/width, 0.f, 0.f, -1.f,
+            0.f, -2.f/height, 0.f, 1.f,
             0.f, 0.f, 1.f, 0.f,
             0.f, 0.f, 0.f, 1.f,
         };
 
         glUseProgram(program);
+
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+
+        glLineWidth(5.f);
+        glPointSize(20);
+        glDrawArrays(GL_POINTS, 0, vertices.size());
+        glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
 
         SDL_GL_SwapWindow(window);
     }
