@@ -328,7 +328,7 @@ int main() try
         glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
         glBindVertexArray(vao_bezier);
         glPointSize(20);
-        glDrawArrays(GL_POINTS, 0, vertices_bezier.size());
+        // glDrawArrays(GL_POINTS, 0, vertices_bezier.size());
         glDrawArrays(GL_LINE_STRIP, 0, vertices_bezier.size());
  
         SDL_GL_SwapWindow(window);
