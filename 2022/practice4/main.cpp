@@ -226,23 +226,6 @@ int main() try
             break;
         case SDL_KEYDOWN:
             button_down[event.key.keysym.sym] = true;
-            switch (event.key.keysym.sym)
-            {
-            case SDLK_LEFT:
-                bunny_x -= speed * dt;
-                break;
-            case SDLK_RIGHT:
-                bunny_x += speed * dt;
-                break;
-            case SDLK_UP:
-                bunny_y += speed * dt;
-                break;
-            case SDLK_DOWN:
-                bunny_y -= speed * dt;
-                break;
-            default:
-                break;
-            }
             break;
         case SDL_KEYUP:
             button_down[event.key.keysym.sym] = false;
@@ -307,6 +290,11 @@ int main() try
 
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transformYZ);
         glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        if (button_down[SDLK_LEFT]) bunny_x -= speed * dt;
+        if (button_down[SDLK_RIGHT]) bunny_x += speed * dt;
+        if (button_down[SDLK_UP]) bunny_y += speed * dt;
+        if (button_down[SDLK_DOWN]) bunny_y -= speed * dt;
 
         SDL_GL_SwapWindow(window);
     }
