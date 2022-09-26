@@ -150,13 +150,57 @@ int main() try
     GLuint transform_location = glGetUniformLocation(program, "transform");
 
     std::string project_root = PROJECT_ROOT;
-    obj_data bunny = parse_obj(project_root + "/bunny.obj");
+    obj_data bunny = parse_obj(project_root + "/bunny_lowres.obj");
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     float time = 0.f;
 
     std::map<SDL_Keycode, bool> button_down;
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+        bunny.vertices.size() * sizeof(bunny.vertices[0]),
+        bunny.vertices.data(), GL_STATIC_DRAW);
+
+    GLuint ebo;
+    glGenBuffers(1, &ebo);
+
+    glBindBuffer(GL_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ARRAY_BUFFER,
+        bunny.indices.size() * sizeof(bunny.indices[0]),
+        bunny.indices.data(), GL_STATIC_DRAW);
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    // Настраиваем атрибуты 
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), 0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(12));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(24));
+
+    // связь с ebo
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+
+    glEnable(GL_DEPTH_TEST);
+
+    // для задания 6
+    // glEnable(GL_CULL_FACE);
+    // glCullFace(GL_FRONT);
+
+    float bunny_x = 0.f;
+    float bunny_y = 0.f;
+    float speed = 2.f;
 
     bool running = true;
     while (running)
@@ -175,12 +219,6 @@ int main() try
                 break;
             }
             break;
-        case SDL_KEYDOWN:
-            button_down[event.key.keysym.sym] = true;
-            break;
-        case SDL_KEYUP:
-            button_down[event.key.keysym.sym] = false;
-            break;
         }
 
         if (!running)
@@ -193,25 +231,98 @@ int main() try
 
         glClear(GL_COLOR_BUFFER_BIT);
 
+        float near = 0.01;
+        float far = 100.0;
+        float right = near;
+        float top = right * height / width;
+
+        float angle = time;
+        float scale = 0.5f;
+
         float view[16] =
         {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
+            near / right, 0.f, 0.f, 0.f,
+            0.f, near / top, 0.f, 0.f,
+            0.f, 0.f, -(far + near) / (far - near), - 2 * far * near / (far - near),
+            0.f, 0.f, -1.f, 0.f,
+        };
+
+        float transformXZ[16] =
+        {
+            scale * cos(angle), 0.f, -scale * sin(angle), bunny_x,
+            0.f, scale * 1.f, 0.f, bunny_y,
+            scale * sin(angle), 0.f, scale * cos(angle), -3.f,
             0.f, 0.f, 0.f, 1.f,
         };
 
-        float transform[16] =
+        float transformXY[16] =
         {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
+            scale * cos(angle), -scale * sin(angle), 0.f, bunny_x + 1.5f,
+            scale * sin(angle), scale * cos(angle), 0.f, bunny_y + 0.5f,
+            0.f, 0.f, scale * 1.f, -3.f,
+            0.f, 0.f, 0.f, 1.f,
+        };
+
+        float transformYZ[16] =
+        {
+            scale * 1.f, 0.f, 0.f, bunny_x - 1.5f,
+            0.f, scale * cos(angle), -scale * sin(angle), bunny_y - 0.5f,
+            0.f, scale * sin(angle), scale * cos(angle), -3.f,
             0.f, 0.f, 0.f, 1.f,
         };
 
         glUseProgram(program);
+        glBindVertexArray(vao);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
         glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
-        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transformXZ);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transformXY);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        glUniformMatrix4fv(transform_location, 1, GL_TRUE, transformYZ);
+        glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
+
+        for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
+        {
+            case SDL_QUIT:
+                running = false;
+                break;
+            case SDL_KEYDOWN:
+                button_down[event.key.keysym.sym] = true;
+                switch (event.key.keysym.sym)
+                {
+                case SDLK_LEFT:
+                    bunny_x -= speed * dt;
+                    break;
+                case SDLK_RIGHT:
+                    bunny_x += speed * dt;
+                    break;
+                case SDLK_UP:
+                    bunny_y += speed * dt;
+                    break;
+                case SDLK_DOWN:
+                    bunny_y -= speed * dt;
+                    break;
+                default:
+                    break;
+                }
+                break;
+            case SDL_KEYUP:
+                button_down[event.key.keysym.sym] = false;
+                break;
+            case SDL_WINDOWEVENT: switch (event.window.event)
+                {
+                case SDL_WINDOWEVENT_RESIZED:
+                    width = event.window.data1;
+                    height = event.window.data2;
+                    glViewport(0, 0, width, height);
+                    break;
+                }
+                break;
+        }
 
         SDL_GL_SwapWindow(window);
     }
