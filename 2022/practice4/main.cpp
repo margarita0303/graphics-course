@@ -205,6 +205,11 @@ int main() try
     bool running = true;
     while (running)
     {
+        auto now = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+        last_frame_start = now;
+        time += dt;
+
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
         {
         case SDL_QUIT:
@@ -219,15 +224,33 @@ int main() try
                 break;
             }
             break;
+        case SDL_KEYDOWN:
+            button_down[event.key.keysym.sym] = true;
+            switch (event.key.keysym.sym)
+            {
+            case SDLK_LEFT:
+                bunny_x -= speed * dt;
+                break;
+            case SDLK_RIGHT:
+                bunny_x += speed * dt;
+                break;
+            case SDLK_UP:
+                bunny_y += speed * dt;
+                break;
+            case SDLK_DOWN:
+                bunny_y -= speed * dt;
+                break;
+            default:
+                break;
+            }
+            break;
+        case SDL_KEYUP:
+            button_down[event.key.keysym.sym] = false;
+            break;
         }
 
         if (!running)
             break;
-
-        auto now = std::chrono::high_resolution_clock::now();
-        float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
-        last_frame_start = now;
-        time += dt;
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -284,45 +307,6 @@ int main() try
 
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transformYZ);
         glDrawElements(GL_TRIANGLES, bunny.indices.size(), GL_UNSIGNED_INT, (void*)(0));
-
-        for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
-        {
-            case SDL_QUIT:
-                running = false;
-                break;
-            case SDL_KEYDOWN:
-                button_down[event.key.keysym.sym] = true;
-                switch (event.key.keysym.sym)
-                {
-                case SDLK_LEFT:
-                    bunny_x -= speed * dt;
-                    break;
-                case SDLK_RIGHT:
-                    bunny_x += speed * dt;
-                    break;
-                case SDLK_UP:
-                    bunny_y += speed * dt;
-                    break;
-                case SDLK_DOWN:
-                    bunny_y -= speed * dt;
-                    break;
-                default:
-                    break;
-                }
-                break;
-            case SDL_KEYUP:
-                button_down[event.key.keysym.sym] = false;
-                break;
-            case SDL_WINDOWEVENT: switch (event.window.event)
-                {
-                case SDL_WINDOWEVENT_RESIZED:
-                    width = event.window.data1;
-                    height = event.window.data2;
-                    glViewport(0, 0, width, height);
-                    break;
-                }
-                break;
-        }
 
         SDL_GL_SwapWindow(window);
     }
