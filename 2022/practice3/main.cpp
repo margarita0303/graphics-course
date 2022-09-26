@@ -134,6 +134,20 @@ void count_bezier_vertices(int quality, std::vector<vertex> &vertices, std::vect
         vertices_bezier.push_back(vertex {{new_vertex}, {0, 0, 0, 0}});
     }
 }
+
+void update_vbos(int quality, std::vector<vertex> &vertices, 
+                std::vector<vertex> &vertices_bezier, GLuint vbo, GLuint vbo_bezier) {
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+        vertices.size() * sizeof(vertices[0]),
+        vertices.data(), GL_STATIC_DRAW);
+
+    count_bezier_vertices(quality, vertices, vertices_bezier);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_bezier);
+    glBufferData(GL_ARRAY_BUFFER,
+        vertices_bezier.size() * sizeof(vertices_bezier[0]),
+        vertices_bezier.data(), GL_STATIC_DRAW);
+}
  
 int main() try
 {
@@ -259,42 +273,28 @@ int main() try
                 int mouse_x = event.button.x;
                 int mouse_y = event.button.y;
                 vertices.push_back(vertex {{1.f * mouse_x, 1.f * mouse_y}, {20, 20, 20, 20}});
-                glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                glBufferData(GL_ARRAY_BUFFER,
-                    vertices.size() * sizeof(vertices[0]),
-                    vertices.data(), GL_STATIC_DRAW);
-
-                count_bezier_vertices(quality, vertices, vertices_bezier);
-                glBindBuffer(GL_ARRAY_BUFFER, vbo_bezier);
-                glBufferData(GL_ARRAY_BUFFER,
-                    vertices_bezier.size() * sizeof(vertices_bezier[0]),
-                    vertices_bezier.data(), GL_STATIC_DRAW);
+                update_vbos(quality, vertices, vertices_bezier, vbo, vbo_bezier);
             }
             else if (event.button.button == SDL_BUTTON_RIGHT)
             {
                 if (vertices.size() != 0) {
                     vertices.pop_back();
-                    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                    glBufferData(GL_ARRAY_BUFFER,
-                        vertices.size() * sizeof(vertices[0]),
-                        vertices.data(), GL_STATIC_DRAW);
-                    
-                    count_bezier_vertices(quality, vertices, vertices_bezier);
-                    glBindBuffer(GL_ARRAY_BUFFER, vbo_bezier);
-                    glBufferData(GL_ARRAY_BUFFER,
-                        vertices_bezier.size() * sizeof(vertices_bezier[0]),
-                        vertices_bezier.data(), GL_STATIC_DRAW);
+                    update_vbos(quality, vertices, vertices_bezier, vbo, vbo_bezier);
                 }
             }
             break;
         case SDL_KEYDOWN:
             if (event.key.keysym.sym == SDLK_LEFT)
             {
- 
+                if (quality > 1) {
+                    quality--;
+                    update_vbos(quality, vertices, vertices_bezier, vbo, vbo_bezier);
+                }
             }
             else if (event.key.keysym.sym == SDLK_RIGHT)
             {
- 
+                quality++;
+                update_vbos(quality, vertices, vertices_bezier, vbo, vbo_bezier);
             }
             break;
         }
