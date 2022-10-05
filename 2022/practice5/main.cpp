@@ -41,27 +41,37 @@ uniform mat4 projection;
 
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
+layout (location = 2) in vec2 in_texcoord;
 
 out vec3 normal;
+out vec2 texcoord;
 
 void main()
 {
     gl_Position = projection * transform * vec4(in_position, 1.0);
     normal = mat3(transform) * in_normal;
+    texcoord = in_texcoord;
 }
 )";
+
+// sampler2D привязан к текущей структуре 
+// если текстура одна, это она и будет, если несколько, нужно делать glActiveTexture + glBindTexture
 
 const char fragment_shader_source[] =
 R"(#version 330 core
 
 in vec3 normal;
+in vec2 texcoord;
 
 layout (location = 0) out vec4 out_color;
+
+uniform sampler2D sampler;
+uniform float time;
 
 void main()
 {
     float lightness = 0.5 + 0.5 * dot(normalize(normal), normalize(vec3(1.0, 2.0, 3.0)));
-    vec3 albedo = vec3(1.0);
+    vec3 albedo = vec3(texture(sampler, vec2(texcoord.x + time, texcoord.y)));
     out_color = vec4(lightness * albedo, 1.0);
 }
 )";
@@ -149,21 +159,106 @@ int main() try
     auto fragment_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_source);
     auto program = create_program(vertex_shader, fragment_shader);
 
+    // для работы с uniform-переменными в шейдерах
     GLuint transform_location = glGetUniformLocation(program, "transform");
     GLuint projection_location = glGetUniformLocation(program, "projection");
+    GLuint texture_location = glGetUniformLocation(program, "sampler");
+    GLuint time_location = glGetUniformLocation(program, "time");
 
     std::string project_root = PROJECT_ROOT;
     std::string cow_texture_path = project_root + "/cow.png";
     obj_data cow = parse_obj(project_root + "/cow.obj");
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
-
     float time = 0.f;
-
     float angle_y = M_PI;
     float offset_z = -2.f;
-
     std::map<SDL_Keycode, bool> button_down;
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, cow.vertices.size() * sizeof(obj_data::vertex), cow.vertices.data(), GL_STATIC_DRAW);
+
+    GLuint ebo;
+    glGenBuffers(1, &ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, cow.indices.size() * sizeof(std::uint32_t), cow.indices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), 0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(12));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(obj_data::vertex), (void*)(24));
+
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    // настройка без mipmap-уровней
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    size_t size = 512;
+    uint32_t black = 0xFF000000u;
+    uint32_t white = 0xFFFFFFFFu;
+    std::vector<std::uint32_t> pixels(size * size);
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            bool is_black = (bool)((i + j) % 2);
+            if (is_black) {
+                pixels[i * size + j] = black;
+            }
+            else {
+                pixels[i * size + j] = white;
+            }
+        }
+    }
+
+    // загрузка данных в текстуру
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    // генерация mipmap-уровней
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    // настройка mipmap-уровней
+    uint32_t red = 0xFF0000FFu;    
+    std::vector<std::uint32_t> pixels_red(size / 2 * size / 2, red);
+    glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA8, size / 2, size / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels_red.data());
+
+    uint32_t green = 0xFF00FF00u;
+    std::vector<std::uint32_t> pixels_green(size / 4 * size / 4, green);
+    glTexImage2D(GL_TEXTURE_2D, 2, GL_RGBA8, size / 4, size / 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels_green.data());
+
+    uint32_t blue = 0xFFFF0000u;
+    std::vector<std::uint32_t> pixels_blue(size / 8 * size / 8, blue);
+    glTexImage2D(GL_TEXTURE_2D, 3, GL_RGBA8, size / 8, size / 8, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels_blue.data());
+
+    // -----------------------------------------
+    // Задание 5
+
+    GLuint new_texture;
+    glGenTextures(1, &new_texture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, new_texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    int x_size, y_size, n;
+    unsigned char *data = stbi_load(cow_texture_path.c_str(), &x_size, &y_size, &n, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, x_size, y_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     bool running = true;
     while (running)
@@ -230,12 +325,23 @@ int main() try
         glUseProgram(program);
         glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
         glUniformMatrix4fv(projection_location, 1, GL_TRUE, projection);
+        
+        // указать 0, если нужна нулевая текстура, 1 - если первая и тд
+        glUniform1i(texture_location, 1);
+
+        glUniform1f(time_location, time);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, new_texture);
+        glDrawElements(GL_TRIANGLES, cow.indices.size(), GL_UNSIGNED_INT, (void*)(0));
 
         SDL_GL_SwapWindow(window);
     }
 
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
+    stbi_image_free(data);
+
 }
 catch (std::exception const & e)
 {
