@@ -68,20 +68,36 @@ const char fragment_shader_source[] =
         R"(#version 330 core
 
 uniform vec3 camera_position;
-
 uniform vec3 albedo;
-
 uniform vec3 ambient_light;
+
+uniform vec3 sun_direction;
+uniform vec3 sun_color;
+
+uniform vec3 point_light_position;
+uniform vec3 point_light_color;
+uniform vec3 point_light_attenuation;
 
 in vec3 position;
 in vec3 normal;
 
 layout (location = 0) out vec4 out_color;
 
+vec3 diffuse(vec3 direction) {
+    return albedo * max(0.0, dot(normal, direction));
+}
+
 void main()
 {
     vec3 ambient = albedo * ambient_light;
-    vec3 color = ambient;
+
+    float distance = distance(position, point_light_position);
+    vec3 point_light_direction = normalize(point_light_position - position);
+        
+    vec3 point_light = (diffuse(point_light_direction)) * point_light_color / 
+        (point_light_attenuation[0] + point_light_attenuation[1] * distance + point_light_attenuation[2] * distance * distance);
+
+    vec3 color = ambient + diffuse(normalize(sun_direction)) * sun_color + point_light;
     out_color = vec4(color, 1.0);
 }
 )";
@@ -168,6 +184,12 @@ int main() try {
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint albedo_location = glGetUniformLocation(program, "albedo");
     GLuint ambient_light_location = glGetUniformLocation(program, "ambient_light");
+    GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
+    GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
+
+    GLuint point_light_position_location = glGetUniformLocation(program, "point_light_position");
+    GLuint point_light_color_location = glGetUniformLocation(program, "point_light_color");
+    GLuint point_light_attenuation_location = glGetUniformLocation(program, "point_light_attenuation");
 
     std::string project_root = PROJECT_ROOT;
     std::string suzanne_model_path = project_root + "/suzanne.obj";
@@ -281,6 +303,13 @@ int main() try {
         glUniform3fv(camera_position_location, 1, (float *) (&camera_position));
         glUniform3f(albedo_location, 0.7f, 0.4f, 0.2f);
         glUniform3f(ambient_light_location, 0.2f, 0.2f, 0.2f);
+
+        glUniform3f(sun_color_location, 1.f, 0.9f, 0.8f);
+        glUniform3f(sun_direction_location, 0.0f, 2.0f, 2.0f);
+
+        glUniform3f(point_light_position_location, 2 * sin(time), 2 * cos(time), 5 * cos(2 * time));
+        glUniform3f(point_light_color_location, 1.f, 0.f, 0.f);
+        glUniform3f(point_light_attenuation_location, 1.0f, 0.0f, 0.01f);
 
         glBindVertexArray(suzanne_vao);
         glDrawElements(GL_TRIANGLES, suzanne.indices.size(), GL_UNSIGNED_INT, nullptr);
