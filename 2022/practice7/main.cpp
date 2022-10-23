@@ -78,6 +78,11 @@ uniform vec3 point_light_position;
 uniform vec3 point_light_color;
 uniform vec3 point_light_attenuation;
 
+uniform float glossiness;
+uniform float roughness;
+
+uniform bool transparent;
+
 in vec3 position;
 in vec3 normal;
 
@@ -87,6 +92,13 @@ vec3 diffuse(vec3 direction) {
     return albedo * max(0.0, dot(normal, direction));
 }
 
+vec3 specular(vec3 direction) {
+    float power = 1 / roughness / roughness - 1;
+    vec3 reflected = 2 * normal * dot(normal, direction) - direction;
+    vec3 view_direction = normalize(camera_position - position);
+    return glossiness * albedo * pow(max(0.0, dot(reflected, view_direction)), power);
+}
+
 void main()
 {
     vec3 ambient = albedo * ambient_light;
@@ -94,11 +106,16 @@ void main()
     float distance = distance(position, point_light_position);
     vec3 point_light_direction = normalize(point_light_position - position);
         
-    vec3 point_light = (diffuse(point_light_direction)) * point_light_color / 
+    vec3 point_light = (diffuse(point_light_direction) + specular(point_light_direction)) * point_light_color / 
         (point_light_attenuation[0] + point_light_attenuation[1] * distance + point_light_attenuation[2] * distance * distance);
 
-    vec3 color = ambient + diffuse(normalize(sun_direction)) * sun_color + point_light;
+    vec3 sun_light = (diffuse(normalize(sun_direction)) + specular(normalize(sun_direction))) * sun_color;
+
+    vec3 color = ambient + sun_light + point_light;
     out_color = vec4(color, 1.0);
+    if (transparent) {
+        out_color = vec4(color, 0.5);
+    }
 }
 )";
 
@@ -190,6 +207,11 @@ int main() try {
     GLuint point_light_position_location = glGetUniformLocation(program, "point_light_position");
     GLuint point_light_color_location = glGetUniformLocation(program, "point_light_color");
     GLuint point_light_attenuation_location = glGetUniformLocation(program, "point_light_attenuation");
+
+    GLuint glossiness_location = glGetUniformLocation(program, "glossiness");
+    GLuint roughness_location = glGetUniformLocation(program, "roughness");
+
+    GLuint transparent_location = glGetUniformLocation(program, "transparent");
 
     std::string project_root = PROJECT_ROOT;
     std::string suzanne_model_path = project_root + "/suzanne.obj";
@@ -307,9 +329,21 @@ int main() try {
         glUniform3f(sun_color_location, 1.f, 0.9f, 0.8f);
         glUniform3f(sun_direction_location, 0.0f, 2.0f, 2.0f);
 
-        glUniform3f(point_light_position_location, 2 * sin(time), 2 * cos(time), 5 * cos(2 * time));
+        glUniform3f(point_light_position_location, 2 * sin(time), 2 * cos(time), 2 * cos(2 * time));
         glUniform3f(point_light_color_location, 1.f, 0.f, 0.f);
         glUniform3f(point_light_attenuation_location, 1.0f, 0.0f, 0.01f);
+
+        glUniform1f(glossiness_location, 5.0f);
+        glUniform1f(roughness_location, 0.1f);
+
+        if (transparent) {
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glUniform1i(transparent_location, true);
+        } else {
+            glDisable(GL_BLEND);
+        }
 
         glBindVertexArray(suzanne_vao);
         glDrawElements(GL_TRIANGLES, suzanne.indices.size(), GL_UNSIGNED_INT, nullptr);
