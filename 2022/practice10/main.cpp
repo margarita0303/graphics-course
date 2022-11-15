@@ -76,6 +76,8 @@ uniform vec3 light_direction;
 uniform vec3 camera_position;
 
 uniform sampler2D albedo_texture;
+uniform sampler2D normal_texture;
+uniform sampler2D environment_texture;
 
 in vec3 position;
 in vec3 tangent;
@@ -92,9 +94,32 @@ void main()
 
     float lightness = ambient_light + max(0.0, dot(normalize(normal), light_direction));
 
-    vec3 albedo = texture(albedo_texture, texcoord).rgb;
+    // vec3 albedo = texture(albedo_texture, texcoord).rgb;
 
-    out_color = vec4(lightness * albedo, 1.0);
+    // Задание 1
+    // vec3 albedo = normal * 0.5 + vec3(0.5);
+
+    // Задание 2
+    // vec3 albedo = texture(normal_texture, texcoord).rgb;
+
+    // Задание 3
+    vec3 bitangent = cross(tangent, normal);
+    mat3 tbn = mat3(tangent, bitangent, normal);
+    vec3 real_normal = tbn * (texture(normal_texture, texcoord).xyz * 2.0 - vec3(1.0));
+    // vec3 albedo = real_normal * 0.5 + vec3(0.5);
+
+    // Задание 4
+    vec3 albedo = texture(albedo_texture, texcoord).rgb;
+    lightness = ambient_light + max(0.0, dot(normalize(real_normal), light_direction));
+
+    // Задание 5
+    vec3 view_direction = normalize(camera_position - position);
+    vec3 reflected_direction = 2.0 * real_normal * dot(real_normal, view_direction) - view_direction;
+    float x = atan(reflected_direction.z, reflected_direction.x) / PI * 0.5 + 0.5;
+    float y = -atan(reflected_direction.y, length(reflected_direction.xz)) / PI + 0.5;
+    out_color = vec4(texture(environment_texture,vec2(x,y)).xyz * 0.5 + lightness * albedo * 0.5, 1.0);
+
+    // out_color = vec4(lightness * albedo, 1.0);
 }
 )";
 
@@ -252,6 +277,14 @@ int main() try
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint albedo_texture_location = glGetUniformLocation(program, "albedo_texture");
 
+    // Задание 2
+    GLuint normal_texture_location = glGetUniformLocation(program, "normal_texture");
+    ///////////////////////
+
+    // Задание 5
+    GLuint environment_texture_location = glGetUniformLocation(program, "environment_texture");
+    ///////////////////////
+
     GLuint sphere_vao, sphere_vbo, sphere_ebo;
     glGenVertexArrays(1, &sphere_vao);
     glBindVertexArray(sphere_vao);
@@ -280,6 +313,14 @@ int main() try
 
     std::string project_root = PROJECT_ROOT;
     GLuint albedo_texture = load_texture(project_root + "/textures/brick_albedo.jpg");
+
+    // Задание 2
+    GLuint normal_texture = load_texture(project_root + "/textures/brick_normal.jpg");
+    ///////////////////////
+
+    // Задание 5 
+    GLuint environment_texture = load_texture(project_root + "/textures/environment_map.jpg");
+    ///////////////////////
 
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -365,6 +406,18 @@ int main() try
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
         glUniform1i(albedo_texture_location, 0);
+
+        // Задание 2
+        glUniform1i(normal_texture_location, 1);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, normal_texture);
+        ////////////////////////
+
+        // Задание 5 
+        glUniform1i(environment_texture_location, 2);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, environment_texture);
+        ////////////////////////
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, albedo_texture);
