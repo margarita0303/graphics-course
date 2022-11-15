@@ -97,12 +97,89 @@ vec3 phong(vec3 direction) {
     return diffuse(direction) + specular(direction);
 }
 
+uniform mat4 shadow_projection;
+uniform sampler2DShadow shadow_map;
+
 void main()
 {
     float ambient_light = 0.2;
-    vec3 color = albedo * ambient_light + sun_color * phong(sun_direction);
+    vec3 color = albedo * ambient_light;
+    vec4 ndc = (shadow_projection * vec4(position,1.0));
+    ndc = ndc * 0.5 + vec4(0.5);
+
+    if (-1.0 <= ndc.x && ndc.x <= 1.0 && -1.0 <= ndc.y && ndc.y <= 1.0 && -1.0 <= ndc.z && ndc.z <= 1.0) {
+
+        // Задание 8.4
+        // if (ndc.z > texture2D(shadow_map, ndc.xy).x) {
+        //     out_color = vec4(color, 1.0);
+        //     return;
+        // }
+
+        // Задание 8.6
+        color = albedo * ambient_light + (sun_color * phong(sun_direction)) *  texture(shadow_map, ndc.xyz);
+        out_color = vec4(color, 1.0);
+        return;
+    }
+
+    color = albedo * ambient_light + sun_color * phong(sun_direction);
     out_color = vec4(color, 1.0);
 }
+)";
+
+// ---------------------------------------
+
+const char vertex_shader_debug_source[] = R"(#version 330 core
+const vec2 VERTICES[6] = vec2[6](
+vec2(-1.0, -0.5),
+vec2(-1.0, -1.0),
+vec2(-0.5, -0.5),
+vec2(-1.0, -1.0),
+vec2(-0.5, -1.0),
+vec2(-0.5, -0.5)
+);
+out vec2 texcoord;
+
+void main()
+{ 
+    gl_Position = vec4(VERTICES[gl_VertexID], 0.0, 1.0);
+    texcoord = vec2(gl_Position.x, gl_Position.y);
+    texcoord *= 2;
+    texcoord += vec2(2);
+}
+)";
+
+const char fragment_shader_debug_source[] = R"(#version 330 core
+layout (location = 0)
+out vec4 out_color;
+
+uniform sampler2D sample;
+
+in vec2 texcoord;
+
+void main()
+{ 
+    out_color = vec4(texture2D(sample, texcoord).r);
+}
+)";
+
+// ---------------------------------------
+
+const char vertex_shader_shadow_source[] =
+R"(#version 330 core
+layout (location = 0) in vec3 in_position;
+
+uniform mat4 model;
+uniform mat4 shadow_projection;
+
+void main()
+{
+    gl_Position = (shadow_projection * (model * vec4(in_position,1.0)));
+}
+)";
+
+const char fragment_shader_shadow_source[] =
+R"(#version 330 core
+void main() {}
 )";
 
 GLuint create_shader(GLenum type, const char *source)
@@ -195,9 +272,69 @@ try
     GLuint sun_direction_location = glGetUniformLocation(program, "sun_direction");
     GLuint sun_color_location = glGetUniformLocation(program, "sun_color");
 
+    // Задание 8.1
+
+    int shadow_map_size = 1024;
+    GLuint shadow_texture;
+    glGenTextures(1, &shadow_texture);
+    glBindTexture(GL_TEXTURE_2D, shadow_texture);
+
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Задание 8.6
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,  GL_LEQUAL);
+    // -------------
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size, shadow_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+
+    GLuint shadow_fbo;
+    glGenFramebuffers(1, &shadow_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadow_fbo);
+    glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadow_texture, 0);
+
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        throw std::runtime_error("Framebuffer incomplete");
+    }
+
+    // --------------
+
     std::string project_root = PROJECT_ROOT;
     std::string scene_path = project_root + "/buddha.obj";
     obj_data scene = parse_obj(scene_path);
+
+    // Задание 8.2 
+
+    auto vertex_debug_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_debug_source);
+    auto fragment_debug_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_debug_source);
+    auto debug_program = create_program(vertex_debug_shader, fragment_debug_shader);
+    
+    GLuint debug_vao;
+    glGenVertexArrays(1, &debug_vao);
+
+    // --------------
+
+    // Задание 8.3 
+
+    auto vertex_shadow_shader = create_shader(GL_VERTEX_SHADER, vertex_shader_shadow_source);
+    auto fragment_shadow_shader = create_shader(GL_FRAGMENT_SHADER, fragment_shader_shadow_source);
+    auto shadow_program = create_program(vertex_shadow_shader, fragment_shadow_shader);
+
+    GLuint shadow_projection_location = glGetUniformLocation(shadow_program, "shadow_projection");
+    GLuint shadow_model_location = glGetUniformLocation(shadow_program, "model");
+
+    // --------------
+
+    // Задание 8.4
+
+    GLuint shadow_projection_location_main = glGetUniformLocation(program, "shadow_projection");
+
+    // --------------
 
     GLuint scene_vao, scene_vbo, scene_ebo;
     glGenVertexArrays(1, &scene_vao);
@@ -269,12 +406,52 @@ try
         if (button_down[SDLK_RIGHT])
             camera_angle -= 2.f * dt;
 
-        glViewport(0, 0, width, height);
+        glm::vec3 sun_direction = glm::normalize(glm::vec3(std::sin(time * 0.5f), 2.f, std::cos(time * 0.5f)));
+
+        // Задание 8.3
+        
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadow_fbo);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glViewport(0, 0, shadow_map_size, shadow_map_size);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
+
+        glm::mat4 shadow_model(1.f);
+
+        glm::vec3 light_Z = glm::vec3(0, -1, 0);
+        glm::vec3  light_X = glm::vec3(1, 0, 0);
+        glm::vec3  light_Y = glm::cross(light_X, light_Z);
+
+        // Задание 8.5
+        light_Z = -sun_direction;
+        light_X = glm::normalize(glm::cross(light_Z, {1.f, 0.f, 0.f}));
+        light_Y = glm::normalize(glm::cross(light_X, light_Z));
+        // ---------------
+
+        glm::mat4 shadow_projection = glm::mat4(glm::transpose(glm::mat3(light_X, light_Y, light_Z)));
+
+        glUseProgram(shadow_program);
+        glBindTexture(GL_TEXTURE_2D, shadow_texture);
+
+        glUniformMatrix4fv(shadow_model_location, 1, GL_FALSE, reinterpret_cast<float *>(&shadow_model));
+        glUniformMatrix4fv(shadow_projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&shadow_projection));
+
+        glBindVertexArray(scene_vao);
+        glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
+
+        // ----------------
+
+        glViewport(0, 0, width, height);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
 
         float near = 0.1f;
         float far = 100.f;
@@ -292,9 +469,13 @@ try
 
         glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
 
-        glm::vec3 sun_direction = glm::normalize(glm::vec3(std::sin(time * 0.5f), 2.f, std::cos(time * 0.5f)));
-
         glUseProgram(program);
+
+        // Задание 8.4 
+
+        glUniformMatrix4fv(shadow_projection_location_main, 1, GL_FALSE, reinterpret_cast<float *>(&shadow_projection));
+
+        // ----------------
 
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
@@ -306,6 +487,12 @@ try
 
         glBindVertexArray(scene_vao);
         glDrawElements(GL_TRIANGLES, scene.indices.size(), GL_UNSIGNED_INT, nullptr);
+
+        glUseProgram(debug_program);
+        glBindVertexArray(debug_vao);
+        glBindTexture(GL_TEXTURE_2D, shadow_texture);
+        glDisable(GL_DEPTH_TEST);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         SDL_GL_SwapWindow(window);
     }
