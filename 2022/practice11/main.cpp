@@ -49,13 +49,16 @@ R"(#version 330 core
 
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in float in_size;
+layout (location = 2) in float in_angle;
 
 out float size;
+out float angle;
 
 void main()
 {
     gl_Position = vec4(in_position, 1.0);
     size = in_size;
+    angle = in_angle;
 }
 )";
 
@@ -71,6 +74,7 @@ layout (points) in;
 layout (triangle_strip, max_vertices = 4) out;
 
 in float size[];
+in float angle[];
 
 out vec2 texcoord;
 
@@ -88,10 +92,12 @@ void main()
     vec3 x = normalize(cross(z, vec3(1.0, 0.0, 0.0)));
     vec3 y = normalize(cross(x, z));
 
+    x = normalize(cos(angle[0]) * x + sin(angle[0]) * y);
+    y = normalize(cross(x, z));
+
     for (int i = 0; i < 4; ++i)
     {
         texcoord = (vertices[i].xy * 0.5) / size[0] + vec2(0.5);
-        gl_Position = projection * view * model * vec4(center + vertices[i], 1.0);
         gl_Position = projection * view * model * vec4(center + x*vertices[i][0] + y*vertices[i][1], 1.0);
         EmitVertex();
     }
@@ -109,7 +115,6 @@ in vec2 texcoord;
 
 void main()
 {
-    // out_color = vec4(1.0, 0.0, 0.0, 1.0);
     out_color = vec4(texcoord, 0.0, 1.0);
 }
 )";
@@ -153,15 +158,23 @@ GLuint create_program(Shaders ... shaders)
     return result;
 }
 
+std::default_random_engine rng;
+
 struct particle
 {
-    glm::vec3 position;
+    glm::vec3 position = glm::vec3(
+        std::uniform_real_distribution<float>{-1.f, 1.f}(rng),
+        0.f,
+        std::uniform_real_distribution<float>{-1.f, 1.f}(rng)
+    );
     float size = (double)(rand())/RAND_MAX*(0.4 - 0.2) + 0.1;
+    float angle = (double)(rand())/RAND_MAX*(2 * glm::pi<float>() - glm::pi<float>()) + 0.1;
     glm::vec3 velocity = glm::vec3(
         (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01,
         (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01,
         (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01
     );
+    float angular_velocity = (double)(rand())/RAND_MAX*(0.5 - 0.1) + 0.3;
 };
 
 int main() try
@@ -212,15 +225,7 @@ int main() try
     GLuint projection_location = glGetUniformLocation(program, "projection");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
 
-    std::default_random_engine rng;
-
     std::vector<particle> particles(256);
-    for (auto & p : particles)
-    {
-        p.position.x = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
-        p.position.y = 0.f;
-        p.position.z = std::uniform_real_distribution<float>{-1.f, 1.f}(rng);
-    }
 
     GLuint vao, vbo;
     glGenVertexArrays(1, &vao);
@@ -233,6 +238,8 @@ int main() try
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(0));
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(12));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(16));
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
@@ -317,9 +324,16 @@ int main() try
 
         float A = 0.01;
         if (!paused) {
+            if (particles.size() < 256) {
+                particles.emplace_back();
+            }
             for (auto &p : particles) {
+                if (p.velocity.y >= 1.0 || p.size < 0.01) {
+                    p = particle();
+                }
                 p.velocity.y += A * dt;
                 p.position += p.velocity * dt;
+                p.angle += p.angular_velocity * dt;
             }
         }
 
