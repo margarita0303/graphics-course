@@ -48,10 +48,14 @@ const char vertex_shader_source[] =
 R"(#version 330 core
 
 layout (location = 0) in vec3 in_position;
+layout (location = 1) in float in_size;
+
+out float size;
 
 void main()
 {
     gl_Position = vec4(in_position, 1.0);
+    size = in_size;
 }
 )";
 
@@ -64,13 +68,33 @@ uniform mat4 projection;
 uniform vec3 camera_position;
 
 layout (points) in;
-layout (points, max_vertices = 1) out;
+layout (triangle_strip, max_vertices = 4) out;
+
+in float size[];
+
+out vec2 texcoord;
 
 void main()
 {
     vec3 center = gl_in[0].gl_Position.xyz;
-    gl_Position = projection * view * model * vec4(center, 1.0);
-    EmitVertex();
+    vec3 vertices[4] = vec3[4]
+    (
+            vec3(-size[0], -size[0], 0),
+            vec3(-size[0], size[0], 0),
+            vec3(size[0], -size[0], 0),
+            vec3(size[0], size[0], 0)
+    );
+    vec3 z = normalize(camera_position - center);
+    vec3 x = normalize(cross(z, vec3(1.0, 0.0, 0.0)));
+    vec3 y = normalize(cross(x, z));
+
+    for (int i = 0; i < 4; ++i)
+    {
+        texcoord = (vertices[i].xy * 0.5) / size[0] + vec2(0.5);
+        gl_Position = projection * view * model * vec4(center + vertices[i], 1.0);
+        gl_Position = projection * view * model * vec4(center + x*vertices[i][0] + y*vertices[i][1], 1.0);
+        EmitVertex();
+    }
     EndPrimitive();
 }
 
@@ -81,9 +105,12 @@ R"(#version 330 core
 
 layout (location = 0) out vec4 out_color;
 
+in vec2 texcoord;
+
 void main()
 {
-    out_color = vec4(1.0, 0.0, 0.0, 1.0);
+    // out_color = vec4(1.0, 0.0, 0.0, 1.0);
+    out_color = vec4(texcoord, 0.0, 1.0);
 }
 )";
 
@@ -129,6 +156,12 @@ GLuint create_program(Shaders ... shaders)
 struct particle
 {
     glm::vec3 position;
+    float size = (double)(rand())/RAND_MAX*(0.4 - 0.2) + 0.1;
+    glm::vec3 velocity = glm::vec3(
+        (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01,
+        (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01,
+        (double)(rand())/RAND_MAX*(0.9 - 0.1) + 0.01
+    );
 };
 
 int main() try
@@ -198,6 +231,8 @@ int main() try
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(12));
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
@@ -279,6 +314,14 @@ int main() try
         glm::mat4 projection = glm::perspective(glm::pi<float>() / 2.f, (1.f * width) / height, near, far);
 
         glm::vec3 camera_position = (glm::inverse(view) * glm::vec4(0.f, 0.f, 0.f, 1.f)).xyz();
+
+        float A = 0.01;
+        if (!paused) {
+            for (auto &p : particles) {
+                p.velocity.y += A * dt;
+                p.position += p.velocity * dt;
+            }
+        }
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glBufferData(GL_ARRAY_BUFFER, particles.size() * sizeof(particle), particles.data(), GL_STATIC_DRAW);
