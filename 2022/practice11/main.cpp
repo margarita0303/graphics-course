@@ -112,13 +112,14 @@ R"(#version 330 core
 layout (location = 0) out vec4 out_color;
 
 uniform sampler2D tex;
+uniform sampler1D palette;
 
 in vec2 texcoord;
 
 void main()
 {
-    // out_color = vec4(texcoord, 0.0, 1.0);
-    out_color = vec4(1.0, 1.0, 1.0, texture(tex, texcoord).r);
+    vec3 color = texture(palette, texture(tex, texcoord).r).xyz;
+    out_color = vec4(color, texture(tex, texcoord).r);
 }
 )";
 
@@ -228,6 +229,7 @@ int main() try
     GLuint projection_location = glGetUniformLocation(program, "projection");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint tex_location = glGetUniformLocation(program, "tex");
+    GLuint palette_location = glGetUniformLocation(program, "palette");
 
     std::vector<particle> particles(256);
 
@@ -260,6 +262,20 @@ int main() try
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D);
     stbi_image_free(particle_texture_data);
+
+    GLuint palette_texture;
+    glGenTextures(1, &palette_texture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_1D, palette_texture);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    std::vector<glm::vec4> colors = {
+        glm::vec4(1.0, 0.0, 0.0, 1.0),
+        glm::vec4(1.0, 0.5, 0.0, 1.0),
+        glm::vec4(1.0, 1.0, 0.0, 1.0),
+        glm::vec4(1.0, 1.0, 1.0, 1.0)
+    };
+    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, colors.size(), 0, GL_RGBA, GL_FLOAT, colors.data());
 
     glPointSize(5.f);
 
@@ -366,6 +382,7 @@ int main() try
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
         glUniform1i(tex_location, 0);
+        glUniform1i(palette_location, 1);
 
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, particles.size());
