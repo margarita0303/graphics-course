@@ -111,11 +111,14 @@ R"(#version 330 core
 
 layout (location = 0) out vec4 out_color;
 
+uniform sampler2D tex;
+
 in vec2 texcoord;
 
 void main()
 {
-    out_color = vec4(texcoord, 0.0, 1.0);
+    // out_color = vec4(texcoord, 0.0, 1.0);
+    out_color = vec4(1.0, 1.0, 1.0, texture(tex, texcoord).r);
 }
 )";
 
@@ -224,6 +227,7 @@ int main() try
     GLuint view_location = glGetUniformLocation(program, "view");
     GLuint projection_location = glGetUniformLocation(program, "projection");
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
+    GLuint tex_location = glGetUniformLocation(program, "tex");
 
     std::vector<particle> particles(256);
 
@@ -243,6 +247,19 @@ int main() try
 
     const std::string project_root = PROJECT_ROOT;
     const std::string particle_texture_path = project_root + "/particle.png";
+
+    int w, h, n;
+    unsigned char *particle_texture_data = stbi_load(particle_texture_path.c_str(), &w, &h, &n, 4);
+
+    GLuint particle_texture;
+    glGenTextures(1, &particle_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, particle_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, particle_texture_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(particle_texture_data);
 
     glPointSize(5.f);
 
@@ -306,7 +323,9 @@ int main() try
             camera_rotation += 3.f * dt;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
+        // glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
         float near = 0.1f;
         float far = 100.f;
@@ -346,6 +365,7 @@ int main() try
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
+        glUniform1i(tex_location, 0);
 
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, particles.size());
