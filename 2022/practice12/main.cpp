@@ -72,6 +72,7 @@ uniform vec3 camera_position;
 uniform vec3 light_direction;
 uniform vec3 bbox_min;
 uniform vec3 bbox_max;
+uniform sampler3D cloud;
 
 layout (location = 0) out vec4 out_color;
 
@@ -111,9 +112,109 @@ const float PI = 3.1415926535;
 
 in vec3 position;
 
+// Задание 3
+float read_texture(vec3 p)
+{
+    return texture(cloud, (p - bbox_min) / (bbox_max - bbox_min)).x;
+}
+////
+
 void main()
 {
-    out_color = vec4(1.0, 0.5, 0.5, 1.0);
+    // Задание 1
+    vec3 direction = normalize(position - camera_position);
+    vec2 intersect_interval = intersect_bbox(camera_position, direction);
+    float tmin = intersect_interval.x;
+    float tmax = intersect_interval.y;
+    tmin = max(tmin, 0.0);
+    ////
+
+    // Задание 2
+    float absorption = 3.0;
+    float optical_depth = (tmax - tmin) * absorption;
+
+    // Задание 4
+    optical_depth = 0.0;
+    for (int i = 0; i < 64; ++i)
+    {
+        float dt = (tmax - tmin) / 64;
+        float t = tmin + (i + 0.5) * dt;
+        vec3 p = camera_position + t * direction;
+        optical_depth += absorption * read_texture(p) * dt;
+    }
+    ////
+
+    float opacity = 1.0 - exp(-optical_depth);
+    ////
+
+    // Задание 5 
+    absorption = 0.0;
+    float scattering = 4.0;
+    float extinction = absorption + scattering;
+    vec3 light_color = vec3(16.0);
+    vec3 color = vec3(0.0);
+    optical_depth = 0.0;
+    for (int i = 0; i < 64; ++i) 
+    {
+        float dt = (tmax - tmin) / 64;
+        float t = tmin + (i + 0.5) * dt;
+        vec3 p = camera_position + t * direction;
+        optical_depth += extinction * read_texture(p) * dt;
+
+        float light_optical_depth = 0.0;
+        vec2 light_intersect_interval = intersect_bbox(p, light_direction);
+        float light_tmin = light_intersect_interval.x;
+        float light_tmax = light_intersect_interval.y;
+        light_tmin = max(light_tmin, 0.0);
+        float dt_2 = (light_tmax - light_tmin) / 16;
+        for(int j = 0; j < 16; ++j) {
+            light_optical_depth += extinction * read_texture( p + (light_tmin + (j + 0.5) * dt_2) * light_direction) * dt_2;
+        }
+
+        color += light_color * exp(-light_optical_depth) * exp(-optical_depth) * dt * read_texture(p) * scattering / 4.0 / PI;
+    }
+    opacity = 1.0 - exp(-optical_depth);
+    ////
+
+    // Задание 6 
+    vec3 new_absorption = vec3(absorption);
+    vec3 new_scattering = vec3(2.f, 9.f, 5.f);
+    vec3 new_extinction = new_absorption + new_scattering;
+    light_color = vec3(16.0);
+    color = vec3(0.0);
+    vec3 new_optical_depth = vec3(0.0);
+    for (int i = 0; i < 64; ++i) 
+    {
+        float dt = (tmax - tmin) / 64;
+        float t = tmin + (i + 0.5) * dt;
+        vec3 p = camera_position + t * direction;
+        new_optical_depth += new_extinction * read_texture(p) * dt;
+
+        vec3 new_light_optical_depth = vec3(0.0);
+        vec2 light_intersect_interval = intersect_bbox(p, light_direction);
+        float light_tmin = light_intersect_interval.x;
+        float light_tmax = light_intersect_interval.y;
+        light_tmin = max(light_tmin, 0.0);
+        float dt_2 = (light_tmax - light_tmin) / 16;
+        for(int j = 0; j < 16; ++j) {
+            new_light_optical_depth += new_extinction * read_texture( p + (light_tmin + (j + 0.5) * dt_2) * light_direction) * dt_2;
+        }
+        color += light_color * exp(-new_light_optical_depth) * exp(-new_optical_depth) * dt * read_texture(p) * new_scattering / 4.0 / PI;
+    }
+    vec3 new_opacity = 1.0 - exp(-new_optical_depth);
+    ////
+
+    // Задание 3
+    vec3 p = camera_position + direction * (tmin + tmax) / 2;
+    ////
+
+    // out_color = vec4(1.0, 0.5, 0.5, 1.0); // Было изначально
+    // out_color = vec4(vec3(tmax - tmin) / 4.0, 1.0); // Задание 1
+    // out_color = vec4(1.0, 0.75, 0.1, opacity); // Задание 2
+    // out_color = vec4(read_texture(p), 0.0, 0.0, 1.0); // Задание 3
+    // out_color = vec4(0.0, 0.0, 0.0, opacity); // Задание 4
+    // out_color = vec4(color, opacity); // Задание 5
+    out_color = vec4(color * new_opacity, 1.0); // Задание 6
 }
 )";
 
@@ -204,7 +305,7 @@ int main() try
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    SDL_Window * window = SDL_CreateWindow("Graphics course practice 11",
+    SDL_Window * window = SDL_CreateWindow("Graphics course practice 12",
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
         800, 600,
@@ -237,6 +338,10 @@ int main() try
     GLuint camera_position_location = glGetUniformLocation(program, "camera_position");
     GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
 
+    // Задание 3
+    GLuint cloud_location = glGetUniformLocation(program, "cloud");
+    ////
+
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -254,6 +359,22 @@ int main() try
 
     const std::string project_root = PROJECT_ROOT;
     const std::string cloud_data_path = project_root + "/cloud.data";
+
+    // Задание 3
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, texture);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    std::vector<char> pixels(128 * 64 * 64);
+    std::ifstream input(cloud_data_path, std::ios::binary);
+    input.read(pixels.data(), pixels.size());
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R8, 128, 64, 64, 0, GL_RED, GL_UNSIGNED_BYTE, pixels.data());
+    ////
 
     const glm::vec3 cloud_bbox_min{-2.f, -1.f, -1.f};
     const glm::vec3 cloud_bbox_max{ 2.f,  1.f,  1.f};
@@ -324,6 +445,9 @@ int main() try
             view_angle += 2.f * dt;
 
         glClearColor(0.8f, 0.8f, 0.9f, 0.f);
+        // Задание 6
+        glClearColor(0.0f, 0.0f, 0.0f, 0.f);
+        ////
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
@@ -357,6 +481,10 @@ int main() try
         glUniform3fv(bbox_max_location, 1, reinterpret_cast<const float *>(&cloud_bbox_max));
         glUniform3fv(camera_position_location, 1, reinterpret_cast<float *>(&camera_position));
         glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+
+        // Задание 3
+        glUniform1i(cloud_location, 0);
+        ////
 
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, std::size(cube_indices), GL_UNSIGNED_INT, nullptr);
