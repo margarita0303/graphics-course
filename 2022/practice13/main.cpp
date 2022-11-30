@@ -283,6 +283,9 @@ int main() try
     bool paused = false;
 
     bool running = true;
+
+    float interpolation = 0.f;
+
     while (running)
     {
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
@@ -335,7 +338,6 @@ int main() try
             view_angle += 2.f * dt;
 
         auto speed = 1.f;
-        float interpolation = 0.f;
 
         if (button_down[SDLK_LSHIFT])
             interpolation = fmax(0.f, fmin(1.f, interpolation + speed * dt));
