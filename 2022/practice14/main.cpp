@@ -56,13 +56,14 @@ uniform mat4 projection;
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_texcoord;
+layout (location = 3) in vec3 in_instance;
 
 out vec3 normal;
 out vec2 texcoord;
 
 void main()
 {
-    gl_Position = projection * view * model * vec4(in_position, 1.0);
+    gl_Position = projection * view * model * vec4(in_position + in_instance, 1.0);
     normal = mat3(model) * in_normal;
     texcoord = in_texcoord;
 }
@@ -180,6 +181,9 @@ int main() try
     GLuint use_texture_location = glGetUniformLocation(program, "use_texture");
     GLuint light_direction_location = glGetUniformLocation(program, "light_direction");
     GLuint bones_location = glGetUniformLocation(program, "bones");
+    
+    std::vector<GLuint> queries;
+    std::vector<bool> is_query_free;
 
     const std::string project_root = PROJECT_ROOT;
     const std::string model_path = project_root + "/bunny/bunny.gltf";
@@ -233,6 +237,38 @@ int main() try
         stbi_image_free(data);
     }
 
+    // std::vector<glm::vec3> translations;
+    // for(int i = -16;i < 16; i++) {
+    //     for(int j = -16; j < 16; j++) {
+    //         translations.push_back(glm::vec3(float(i), 0.f, float(j)));
+    //     }
+    // }
+
+    // GLuint translations_vbo;
+    // glGenBuffers(1, &translations_vbo);
+    // glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
+    // glBufferData(GL_ARRAY_BUFFER, translations.size() * sizeof(glm::vec3), translations.data(), GL_STATIC_DRAW);
+
+    // for(GLint vao : vaos) {
+    //     glBindVertexArray(vao);
+    //     glEnableVertexAttribArray(3);
+    //     glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
+    //     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<void *>(0));
+    //     glBindBuffer(GL_ARRAY_BUFFER, 0);	
+    //     glVertexAttribDivisor(3, 1);
+    // }
+
+    GLuint translations_vbo;
+    glGenBuffers(1, &translations_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
+
+    for(GLint vao : vaos) {
+        glBindVertexArray(vao);
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<void *>(0));
+        glVertexAttribDivisor(3, 1);
+    }
+
     auto last_frame_start = std::chrono::high_resolution_clock::now();
 
     float time = 0.f;
@@ -245,6 +281,8 @@ int main() try
     bool paused = false;
 
     bool running = true;
+
+    int fixed_lod_value = 1;
     while (running)
     {
         for (SDL_Event event; SDL_PollEvent(&event);) switch (event.type)
@@ -306,6 +344,23 @@ int main() try
         camera_position += camera_move_forward * glm::vec3(-std::sin(camera_rotation), 0.f, std::cos(camera_rotation));
         camera_position += camera_move_sideways * glm::vec3(std::cos(camera_rotation), 0.f, std::sin(camera_rotation));
 
+        GLuint free_query_id = -1;
+        for (int i = 0; i < queries.size(); i++) {
+            if (is_query_free[i]) {
+                free_query_id = i;
+                break;
+            }
+        }
+        if (free_query_id == -1) {
+            int new_query_id = queries.size();
+            is_query_free.push_back(false);
+            queries.push_back(new_query_id);
+            glGenQueries(1, &queries[new_query_id]);
+            free_query_id = new_query_id;
+        }
+        is_query_free[free_query_id] = false;
+        glBeginQuery(GL_TIME_ELAPSED, queries[free_query_id]);
+
         glClearColor(0.8f, 0.8f, 1.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -328,6 +383,32 @@ int main() try
 
         glm::vec3 light_direction = glm::normalize(glm::vec3(1.f, 2.f, 3.f));
 
+        std::vector<glm::vec3> instances[6];
+        frustum f(projection * view);
+
+        for (int i = -16; i < 16; ++i) {
+            for (int j = -16; j < 16; ++j) {
+                glm::vec3 translation = {1.f * i, 0.f, 1.f * j};
+                aabb aabb(input_model.meshes[0].min + translation, input_model.meshes[0].max + translation);
+                if (intersect(aabb, f)) {
+                    int lod = std::min(5, (int)(glm::length(translation - camera_position) / fixed_lod_value));
+                    instances[std::max(0, lod)].push_back(translation);
+                }
+            }
+        }
+
+        // glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
+        // glBufferData(GL_ARRAY_BUFFER, instances.size() * sizeof(glm::vec3), instances.data(), GL_STATIC_DRAW);
+
+        for (int lod = 0; lod < 6; lod++)
+        {
+            auto const &mesh = input_model.meshes[lod];
+            glBindVertexArray(vaos[lod]);
+            glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
+            glBufferData(GL_ARRAY_BUFFER, instances[lod].size() * sizeof(glm::vec3), instances[lod].data(), GL_STATIC_DRAW);
+            glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset), instances[lod].size());
+        }
+
         glUseProgram(program);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
         glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
@@ -336,13 +417,24 @@ int main() try
 
         glBindTexture(GL_TEXTURE_2D, texture);
 
-        {
-            auto const & mesh = input_model.meshes[0];
-            glBindVertexArray(vaos[0]);
-            glDrawElements(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset));
-        }
-
+        glEndQuery(GL_TIME_ELAPSED);
         SDL_GL_SwapWindow(window);
+
+        std::cout << "Number of objects drawn: " << instances[5].size() << std::endl;
+
+        for (int i = 0; i < queries.size(); i++) {
+            if (is_query_free[i])
+                continue;
+
+            GLint result;
+            glGetQueryObjectiv(queries[i], GL_QUERY_RESULT_AVAILABLE, &result);
+            if (result) {
+                is_query_free[i] = true;
+                glGetQueryObjectiv(queries[i], GL_QUERY_RESULT, &result);
+                std::cout << "Query number " << queries[i] << std::endl;
+                std::cout << result / 1e6f << " ms" << std::endl;
+            }
+        }
     }
 
     SDL_GL_DeleteContext(gl_context);
