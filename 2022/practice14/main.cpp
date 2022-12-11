@@ -400,6 +400,14 @@ int main() try
         // glBindBuffer(GL_ARRAY_BUFFER, translations_vbo);
         // glBufferData(GL_ARRAY_BUFFER, instances.size() * sizeof(glm::vec3), instances.data(), GL_STATIC_DRAW);
 
+        glUseProgram(program);
+        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
+        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
+        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
+        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
+
+        glBindTexture(GL_TEXTURE_2D, texture);
+
         for (int lod = 0; lod < 6; lod++)
         {
             auto const &mesh = input_model.meshes[lod];
@@ -408,14 +416,6 @@ int main() try
             glBufferData(GL_ARRAY_BUFFER, instances[lod].size() * sizeof(glm::vec3), instances[lod].data(), GL_STATIC_DRAW);
             glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.count, mesh.indices.type, reinterpret_cast<void *>(mesh.indices.view.offset), instances[lod].size());
         }
-
-        glUseProgram(program);
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
-        glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
-        glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
-        glUniform3fv(light_direction_location, 1, reinterpret_cast<float *>(&light_direction));
-
-        glBindTexture(GL_TEXTURE_2D, texture);
 
         glEndQuery(GL_TIME_ELAPSED);
         SDL_GL_SwapWindow(window);
