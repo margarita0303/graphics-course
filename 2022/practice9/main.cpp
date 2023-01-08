@@ -89,16 +89,16 @@ void main()
     shadow_pos /= shadow_pos.w;
     shadow_pos = shadow_pos * 0.5 + vec4(0.5);
 
-    bool in_shadow_texture = (shadow_pos.x > 0.0) && (shadow_pos.x < 1.0) && (shadow_pos.y > 0.0) && (shadow_pos.y < 1.0) && (shadow_pos.z > 0.0) && (shadow_pos.z < 1.0);
-    float shadow_factor = 1.0;
-    if (in_shadow_texture)
-        // shadow_factor = (texture(shadow_map, shadow_pos.xy).r < shadow_pos.z) ? 0.0 : 1.0;
-        shadow_factor = (texture(shadow_map, shadow_pos.xy).r + bias < shadow_pos.z) ? 0.0 : 1.0;
+    vec2 data = texture(shadow_map, shadow_pos.xy).rg;
+    float mu = data.r;
+    float sigma = data.g - mu * mu;
+    float z = shadow_pos.z;
+    float factor = (z < mu) ? 1.0 : sigma / (sigma + (z - mu) * (z - mu));
 
     vec3 albedo = vec3(1.0, 1.0, 1.0);
 
     vec3 light = ambient;
-    light += light_color * max(0.0, dot(normal, light_direction)) * shadow_factor;
+    light += light_color * max(0.0, dot(normal, light_direction)) * factor;
     vec3 color = albedo * light;
 
     out_color = vec4(color, 1.0);
@@ -324,22 +324,16 @@ int main() try
     GLuint shadow_map;
     glGenTextures(1, &shadow_map);
     glBindTexture(GL_TEXTURE_2D, shadow_map);
-    // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_resolution, shadow_map_resolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, shadow_map_resolution, shadow_map_resolution, 0, GL_RGBA, GL_FLOAT, nullptr);
     
     GLuint shadow_fbo;
     glGenFramebuffers(1, &shadow_fbo);
 
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadow_fbo);
-
-    //glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadow_map, 0);
     glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, shadow_map, 0);
 
     GLuint render_buffer;
@@ -428,16 +422,6 @@ int main() try
         glm::vec3 light_z = -light_direction;
         glm::vec3 light_x = glm::normalize(glm::cross(light_z, {0.f, 1.f, 0.f}));
         glm::vec3 light_y = glm::cross(light_x, light_z);
-
-        // float shadow_scale = 2.f;
-
-        // glm::mat4 transform = glm::mat4(1.f);
-        // for (size_t i = 0; i < 3; ++i)
-        // {
-        //     transform[i][0] = shadow_scale * light_x[i];
-        //     transform[i][1] = shadow_scale * light_y[i];
-        //     transform[i][2] = shadow_scale * light_z[i];
-        // }
 
         auto X_len = 0.f;
         auto Y_len = 0.f;
