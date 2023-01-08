@@ -76,7 +76,10 @@ void main()
 {
     vec3 v = texture(sdf_texture, texcoord).rgb;
     float sdf_value = sdf_scale * ((max(min(v.r, v.g), min(max(v.r, v.g), v.b))) - 0.5);
-    out_color = vec4(vec3(0.0), smoothstep(-0.5, 0.5, sdf_value));
+    vec3 add_stroke = vec3(0.0);
+    if (sdf_value < 1)
+        add_stroke += (1 - sdf_value);
+    out_color = vec4(add_stroke, smoothstep(-0.5, length(vec2(dFdx(sdf_value), dFdy(sdf_value)))/sqrt(2.0), sdf_value));
 }
 )";
 
@@ -304,6 +307,7 @@ int main() try
 
         glm::mat4 transform(1.f);
         transform = glm::scale(transform, glm::vec3({2.f / width, -2.f / height, 0.f}));
+        transform = glm::scale(transform, glm::vec3(5.f));
         transform = glm::translate(transform, bound_box);
 
         glUseProgram(msdf_program);
