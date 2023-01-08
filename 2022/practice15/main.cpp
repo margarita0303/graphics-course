@@ -48,9 +48,18 @@ R"(#version 330 core
 
 uniform mat4 transform;
 
+layout (location = 0) in vec2 in_position;
+layout (location = 1) in vec2 in_texcoord;
+
+out vec2 texcoord;
+out vec4 color;
+
 void main()
 {
-    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    // gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_Position = transform * vec4(in_position, 0.0, 1.0);
+    texcoord = in_texcoord;
+    color = vec4(texcoord, 0.0, 1.0);
 }
 )";
 
@@ -58,10 +67,11 @@ const char msdf_fragment_shader_source[] =
 R"(#version 330 core
 
 layout (location = 0) out vec4 out_color;
+in vec4 color;
 
 void main()
 {
-    out_color = vec4(0.0);
+    out_color = color;
 }
 )";
 
@@ -103,6 +113,11 @@ GLuint create_program(Shaders ... shaders)
 
     return result;
 }
+
+struct vertex {
+    glm::vec2 position;
+    glm::vec2 texcoord;
+};
 
 int main() try
 {
@@ -179,6 +194,31 @@ int main() try
     std::string text = "Hello, world!";
     bool text_changed = true;
 
+    std::vector<vertex> vertices;
+    vertices.push_back(vertex());
+    vertices.push_back(vertex());
+    vertices.push_back(vertex());
+    vertices[0].position = {0.0f, 0.0f};
+    vertices[1].position = {100.0f, 0.0f};
+    vertices[2].position = {0.0f, 100.0f};
+    vertices[0].texcoord = {0.0f, 0.0f};
+    vertices[1].texcoord = {1.0f, 0.0f};
+    vertices[2].texcoord = {0.0f, 1.0f};
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, position));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, texcoord));
+
     bool running = true;
     while (running)
     {
@@ -227,6 +267,14 @@ int main() try
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
+
+        glm::mat4 transform(1.f);
+        transform = glm::ortho(0.0f, (float)width, (float)height, 0.0f, -1.0f, 1.0f);
+
+        glUseProgram(msdf_program);
+        glUniformMatrix4fv(transform_location, 1, GL_FALSE, reinterpret_cast<float *>(&transform));
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 
         SDL_GL_SwapWindow(window);
     }
