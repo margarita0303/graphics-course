@@ -56,7 +56,6 @@ out vec4 color;
 
 void main()
 {
-    // gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
     gl_Position = transform * vec4(in_position, 0.0, 1.0);
     texcoord = in_texcoord;
     color = vec4(texcoord, 0.0, 1.0);
@@ -66,12 +65,18 @@ void main()
 const char msdf_fragment_shader_source[] =
 R"(#version 330 core
 
+uniform float sdf_scale;
+uniform sampler2D sdf_texture;
+
 layout (location = 0) out vec4 out_color;
 in vec4 color;
+in vec2 texcoord;
 
 void main()
 {
-    out_color = color;
+    vec3 v = texture(sdf_texture, texcoord).rgb;
+    float sdf_value = sdf_scale * ((max(min(v.r, v.g), min(max(v.r, v.g), v.b))) - 0.5);
+    out_color = vec4(vec3(0.0), smoothstep(-0.5, 0.5, sdf_value));
 }
 )";
 
@@ -160,6 +165,7 @@ int main() try
     auto msdf_program = create_program(msdf_vertex_shader, msdf_fragment_shader);
 
     GLuint transform_location = glGetUniformLocation(msdf_program, "transform");
+    GLuint scale_location = glGetUniformLocation(msdf_program, "sdf_scale");
 
     const std::string project_root = PROJECT_ROOT;
     const std::string font_path = project_root + "/font/font-msdf.json";
@@ -195,15 +201,6 @@ int main() try
     bool text_changed = true;
 
     std::vector<vertex> vertices;
-    vertices.push_back(vertex());
-    vertices.push_back(vertex());
-    vertices.push_back(vertex());
-    vertices[0].position = {0.0f, 0.0f};
-    vertices[1].position = {100.0f, 0.0f};
-    vertices[2].position = {0.0f, 100.0f};
-    vertices[0].texcoord = {0.0f, 0.0f};
-    vertices[1].texcoord = {1.0f, 0.0f};
-    vertices[2].texcoord = {0.0f, 1.0f};
 
     GLuint vao;
     glGenVertexArrays(1, &vao);
@@ -305,6 +302,7 @@ int main() try
 
         glUseProgram(msdf_program);
         glUniformMatrix4fv(transform_location, 1, GL_FALSE, reinterpret_cast<float *>(&transform));
+        glUniform1f(scale_location, font.sdf_scale);
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 
