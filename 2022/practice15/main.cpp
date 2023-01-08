@@ -193,6 +193,8 @@ int main() try
 
     float time = 0.f;
 
+    glm::vec3 bound_box(0.f);
+
     SDL_StartTextInput();
 
     std::map<SDL_Keycode, bool> button_down;
@@ -291,6 +293,9 @@ int main() try
                 vertices.push_back(vertices_for_symbol[4]);
                 vertices.push_back(vertices_for_symbol[5]);
 
+                bound_box.x = -pen.x / 2;
+                bound_box.y = fmin(bound_box.y, -(float)glyph.height);
+
                 pen += glm::vec2{glyph.advance, 0.f};
                 text_changed = false;
                 glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
@@ -298,7 +303,8 @@ int main() try
         }
 
         glm::mat4 transform(1.f);
-        transform = glm::ortho(0.0f, (float)width, (float)height, 0.0f, -1.0f, 1.0f);
+        transform = glm::scale(transform, glm::vec3({2.f / width, -2.f / height, 0.f}));
+        transform = glm::translate(transform, bound_box);
 
         glUseProgram(msdf_program);
         glUniformMatrix4fv(transform_location, 1, GL_FALSE, reinterpret_cast<float *>(&transform));
