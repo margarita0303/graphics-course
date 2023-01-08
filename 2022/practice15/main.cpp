@@ -212,7 +212,7 @@ int main() try
     GLuint vbo;
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STATIC_DRAW);
+    // glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex), vertices.data(), GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, position));
@@ -267,6 +267,38 @@ int main() try
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
+
+        if (text_changed) {
+            vertices.clear();
+            glm::vec2 pen(0.f);
+            for (char c: text) {
+                auto glyph = font.glyphs.at(c);
+                vertex vertices_for_symbol[6];
+                vertices_for_symbol[0].position = {pen.x + glyph.xoffset, pen.y + glyph.yoffset};
+                vertices_for_symbol[0].texcoord = {(float)glyph.x / texture_width, (float)glyph.y / texture_height};
+                vertices_for_symbol[1].position = {pen.x + glyph.xoffset + glyph.width, pen.y + glyph.yoffset + glyph.height};
+                vertices_for_symbol[1].texcoord = {(float)(glyph.x + glyph.width) / texture_width, (float)(glyph.y + glyph.height) / texture_height};
+                vertices_for_symbol[2].position = {pen.x + glyph.xoffset + glyph.width, pen.y + glyph.yoffset};
+                vertices_for_symbol[2].texcoord = {(float)(glyph.x + glyph.width) / texture_width, (float)glyph.y / texture_height};
+                vertices_for_symbol[3].position = {pen.x + glyph.xoffset, pen.y + glyph.yoffset};
+                vertices_for_symbol[3].texcoord = {(float)glyph.x / texture_width, (float)glyph.y / texture_height};
+                vertices_for_symbol[4].position = {pen.x + glyph.xoffset, pen.y + glyph.yoffset + glyph.height};
+                vertices_for_symbol[4].texcoord = {(float)glyph.x / texture_width, (float)(glyph.y + glyph.height) / texture_height};
+                vertices_for_symbol[5].position = {pen.x + glyph.xoffset + glyph.width, pen.y + glyph.yoffset + glyph.height};
+                vertices_for_symbol[5].texcoord = {(float)(glyph.x + glyph.width) / texture_width, (float)(glyph.y + glyph.height) / texture_height};
+
+                vertices.push_back(vertices_for_symbol[0]);
+                vertices.push_back(vertices_for_symbol[1]);
+                vertices.push_back(vertices_for_symbol[2]);
+                vertices.push_back(vertices_for_symbol[3]);
+                vertices.push_back(vertices_for_symbol[4]);
+                vertices.push_back(vertices_for_symbol[5]);
+
+                pen += glm::vec2{glyph.advance, 0.f};
+                text_changed = false;
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+            }
+        }
 
         glm::mat4 transform(1.f);
         transform = glm::ortho(0.0f, (float)width, (float)height, 0.0f, -1.0f, 1.0f);
