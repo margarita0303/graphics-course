@@ -89,11 +89,38 @@ void main()
     shadow_pos /= shadow_pos.w;
     shadow_pos = shadow_pos * 0.5 + vec4(0.5);
 
-    vec2 data = texture(shadow_map, shadow_pos.xy).rg;
+    // vec2 data = texture(shadow_map, shadow_pos.xy).rg;
+    // float mu = data.r;
+    // float sigma = data.g - mu * mu;
+    // float z = shadow_pos.z - bias;
+    // float factor = (z < mu) ? 1.0 : sigma / (sigma + (z - mu) * (z - mu));
+
+    vec2 sum = vec2(0.0);
+    float sum_w = 0.0;
+    float radius = 3.0;
+
+    for (int x = -5; x <= 5; x++) {
+        for (int y = -5; y <= 5; y++) {
+            float c = exp(-float(x * x + y * y) / (radius * radius));
+            sum += c * texture(shadow_map, shadow_pos.xy + vec2(x,y) / vec2(textureSize(shadow_map, 0))).rg;;
+            sum_w += c;
+        }
+    }
+
+    vec2 data = sum / sum_w;
+
     float mu = data.r;
     float sigma = data.g - mu * mu;
-    float z = shadow_pos.z;
+    float z = shadow_pos.z - bias;
     float factor = (z < mu) ? 1.0 : sigma / (sigma + (z - mu) * (z - mu));
+
+    float delta = 0.125;
+    if (factor < delta) {
+        factor = 0;
+    }
+    else {
+        factor = (factor - delta) / (1 - delta);
+    }
 
     vec3 albedo = vec3(1.0, 1.0, 1.0);
 
@@ -165,7 +192,7 @@ out vec4 variable;
 void main()
 {
     float z = gl_FragCoord.z;
-    variable = vec4(z, z * z, 0.0, 0.0);
+    variable = vec4(z, z * z + 0.25f * (dFdx (z) * dFdx (z) + dFdy (z) * dFdy (z)), 0.0, 0.0);
 }
 )";
 
