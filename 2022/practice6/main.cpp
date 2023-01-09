@@ -105,9 +105,11 @@ const char rectangle_fragment_shader_source[] =
 R"(#version 330 core
 in vec2 texcoord;
 layout (location = 0) out vec4 out_color;
+uniform sampler2D render_result;
 void main()
 {
-    out_color = vec4(texcoord, 0.0, 1.0);
+    // out_color = vec4(texcoord, 0.0, 1.0);
+    out_color = vec4(texture(render_result, vec2(texcoord.x, texcoord.y)).xyz, 1.0);
 }
 )";
 
@@ -197,6 +199,7 @@ int main() try
     GLuint projection_location = glGetUniformLocation(dragon_program, "projection");
 
     GLuint camera_position_location = glGetUniformLocation(dragon_program, "camera_position");
+    GLuint render_result_location = glGetUniformLocation(dragon_program, "render_result");
 
     std::string project_root = PROJECT_ROOT;
     std::string dragon_model_path = project_root + "/dragon.obj";
@@ -342,6 +345,7 @@ int main() try
         glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
 
         glUniform3fv(camera_position_location, 1, (float*)(&camera_position));
+        glUniform1i(render_result_location, 0);
 
         glBindVertexArray(dragon_vao);
         glDrawElements(GL_TRIANGLES, dragon.indices.size(), GL_UNSIGNED_INT, nullptr);
@@ -349,6 +353,9 @@ int main() try
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glViewport(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture_map);
 
         glUseProgram(rectangle_program);
         glUniform2f(center_location, -0.5f, -0.5f);
